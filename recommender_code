@@ -1,0 +1,100 @@
+import pandas as pd
+import numpy as np
+from numpy import int64
+
+import requests
+import IPython.display as Disp
+import sklearn
+from sklearn.decomposition import TruncatedSVD
+
+# Read dataset that shows metadata of each song into Pandas dataframe
+songs_metadata_file = 'https://static.turi.com/datasets/millionsong/song_data.csv'
+songs_df =  pd.read_csv(songs_metadata_file)
+songs_df.head()
+
+## 1 million songs in the dataset 
+songs_df.describe()
+
+## Group songs by artists with the largest amount of songs in the dataset using descending order
+songs_df.groupby("artist_name")["song_id"].count().sort_values(ascending=False)
+
+## Filter songs from a particular artist (i.e. Johnny Cash)
+Filter_Artist=songs_df['artist_name']=='Johnny Cash'
+songs_df[Filter_Artist]
+
+# Read dataset that shows how many times a user plays each song into pandas dataframe 
+triplets_file = 'https://static.turi.com/datasets/millionsong/10000.txt'
+songs_to_user_df = pd.read_table(triplets_file,header=None)
+songs_to_user_df.columns = ['user_id', 'song_id', 'listen_count']
+songs_to_user_df.head()
+
+songs_to_user_df.describe()
+
+## Group by number of listens by user -- which user is most active in the dataset
+songs_to_user_df.groupby('user_id')['listen_count'].count().sort_values(ascending=False)
+
+# Merge songs to user dataset -- combine 2 datasets using commonality between them, which is song ID 
+combined_songs_df = pd.merge(songs_to_user_df, songs_df, on='song_id')
+
+## Print a few headers in combined dataset 
+combined_songs_df.head()
+
+# Most listened songs / Most popular songs 
+combined_songs_df.groupby('song_id')['listen_count'].count().sort_values(ascending=False)
+combined_songs_df.groupby('title')['listen_count'].count().sort_values(ascending=False)
+
+## Printing song title by 
+#songs_df_2 = pd.DataFrame(combined_songs_df.groupby('title')['listen_count'].count())
+songs_df_2 = pd.DataFrame({'count' : combined_songs_df.groupby( [ "title"] ).size()}).reset_index()
+songs_df_2.columns=['title','count']
+#songs_df_2.head()
+songs_df_2[(songs_df_2['count'] >= 8277)  & (songs_df_2['count']<9000) ].head()
+song_title = str(songs_df_2[songs_df_2['count'] ==6949 ]['title'].values[0])
+print("This is title")
+print(song_title)
+
+combined_songs_df.groupby('artist_name')['listen_count'].count().sort_values(ascending=False)
+
+Filter = combined_songs_df['song_id']=="SOWCKVR12A8C142411"
+combined_songs_df[Filter]['artist_name'].unique()
+
+# Create a Pivot Table of User Vs. Songs 
+ct_df = combined_songs_df.pivot_table(values='listen_count', index='user_id', columns='title', fill_value=0)
+
+ct_df.head()
+X = ct_df.values.T
+X.shape
+
+print(X)
+
+# Compress dataset into 20 columns by applying Singular Value Decomposition (SVD)
+SVD  = TruncatedSVD(n_components=20, random_state=17)
+result_matrix = SVD.fit_transform(X)
+result_matrix.shape
+
+# Create Pearson coorelation matrix - compute the correlation between the songs 
+corr_mat = np.corrcoef(result_matrix)
+corr_mat.shape
+
+# Print songs related (with high correlation) to specified song 
+song_names = ct_df.columns
+song_list = list(song_names)
+print(song_list)
+
+#query_index = song_list.index('Waiting For Tonight')
+#query_index = song_list.index('Dog Days Are Over (Radio Edit)')
+#query_index = song_list.index('My Happy Ending')
+query_index = song_list.index("Heartbreak Warfare")
+
+#query_index = song_list.index(song_title)
+print(query_index)
+
+# Correlation higher than 0.9 with specified song to find similiar songs by genre
+corr_similar_songs = corr_mat[query_index]
+corr_similar_songs.shape
+print(corr_similar_songs)
+print(type(song_list))
+print((corr_similar_songs<1.0) & (corr_similar_songs>0.9))
+
+# Lists songs related to specified query for song above 
+list(song_names[(corr_similar_songs<1.0) & (corr_similar_songs>0.98)])
